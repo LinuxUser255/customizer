@@ -8,6 +8,7 @@ public class WrappedTextPane extends JTextPane {
 
     public WrappedTextPane(StyledDocument styledDocument){
         this.setEditorKit(new WrapEditorKit());
+        this.setStyledDocument(styledDocument);
     }
 
     public WrappedTextPane(){

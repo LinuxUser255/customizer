@@ -3,7 +3,6 @@ package com.coreyd97.burpcustomizer;
 import com.coreyd97.BurpExtenderUtilities.Alignment;
 import com.coreyd97.BurpExtenderUtilities.PanelBuilder;
 import com.formdev.flatlaf.FlatLaf;
-import lombok.SneakyThrows;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -63,7 +62,7 @@ public class CustomizerPanel extends JPanel {
         twitterButton.addActionListener(actionEvent -> {
             try {
                 Desktop.getDesktop().browse(new URI("https://twitter.com/coreyd97"));
-            } catch (IOException | URISyntaxException e) {}
+            } catch (IOException | URISyntaxException | UnsupportedOperationException e) {}
         });
 
         ImageIcon githubImage = getGithubIcon();
@@ -77,7 +76,7 @@ public class CustomizerPanel extends JPanel {
         viewOnGithubButton.addActionListener(actionEvent -> {
             try {
                 Desktop.getDesktop().browse(new URI("https://github.com/CoreyD97/BurpCustomizer"));
-            } catch (IOException | URISyntaxException e) {}
+            } catch (IOException | URISyntaxException | UnsupportedOperationException e) {}
         });
         contactPanel.add(new JLabel("Created by:"));
         contactPanel.add(twitterButton);
@@ -105,7 +104,8 @@ public class CustomizerPanel extends JPanel {
                 "which also supports 3rd party themes developed for the IntelliJ Platform. This extension allows you to use " +
                 "these themes in Burp Suite, and includes a number of bundled themes to try.\n\n";
         String notesHeader = "Notes:\n";
-        String notes = "When switching from a dark -> light theme, or vice-versa, first change Burp's theme in \"User options -> Display\" or icons will not be colored correctly.";
+        String notes = "When switching from a dark -> light theme, or vice-versa, first change Burp's theme in " +
+                "\"Settings -> User interface -> Display\" or icons will not be colored correctly.\n\n";
         String limitationsHeader = "Limitations:\n";
         String limitations = "Since Burp uses a number of custom GUI elements, PortSwigger extended the default " +
                 "Look and Feel classes with a number of additional properties. In order to try to make these blend in, I've " +
@@ -118,9 +118,8 @@ public class CustomizerPanel extends JPanel {
 
         //Doing this an odd way since insertString seems to cause errors on windows!
         int offset = 0;
-        String[] sections = new String[]{intro, limitationsHeader, limitations, creditsHeader, credits};
-        Style[] styles = new Style[]{italics, bold, null, bold, null, bold, null, bold,
-                null, bold, null, null, italics, null, italics, bold, null, italics, null};
+        String[] sections = new String[]{intro, notesHeader, notes, limitationsHeader, limitations, creditsHeader, credits};
+        Style[] styles = new Style[]{italics, bold, null, bold, null, bold, null};
         String content = String.join("", sections);
         aboutContent.setText(content);
         for (int i = 0; i < sections.length; i++) {
@@ -148,17 +147,33 @@ public class CustomizerPanel extends JPanel {
 
         JButton selectFileButton = new JButton("Select Theme File...");
 
+        //Restore the saved selection before listening for changes, then preview whatever ended up selected.
+        try {
+            if(customizer.getThemeSource() == BurpCustomizer.ThemeSource.FILE && customizer.getSelectedThemeFile() != null) {
+                lookAndFeelSelector.setSelectedItem(null);
+                selectedThemeFile = customizer.getSelectedThemeFile();
+                selectFileButton.setText(selectedThemeFile.getName());
+                previewPanel.setPreviewTheme(customizer.createThemeFromFile(selectedThemeFile));
+            } else {
+                if(customizer.getSelectedBuiltIn() != null) lookAndFeelSelector.setSelectedItem(customizer.getSelectedBuiltIn());
+                if(lookAndFeelSelector.getSelectedItem() != null) {
+                    previewPanel.setPreviewTheme(customizer.createThemeFromDefaults((UIManager.LookAndFeelInfo) lookAndFeelSelector.getSelectedItem()));
+                }
+            }
+        } catch (Exception | LinkageError ignored) {
+            //Only the preview failed. The full error is reported when the theme is applied.
+        }
+
         lookAndFeelSelector.addItemListener(e -> {
             if(e.getStateChange() == ItemEvent.SELECTED) {
                 selectedThemeFile = null;
                 selectFileButton.setText("Select Theme File...");
                 try{
-                    LookAndFeel theme = customizer.createThemeFromDefaults((UIManager.LookAndFeelInfo) e.getItem(), true);
+                    LookAndFeel theme = customizer.createThemeFromDefaults((UIManager.LookAndFeelInfo) e.getItem());
                     previewPanel.setPreviewTheme(theme);
-                }catch (Exception ex){
-                    ex.printStackTrace();
+                }catch (Exception | LinkageError ex){
+                    //Only the preview failed. The full error is reported if the user tries to apply the theme.
                     previewPanel.reset();
-                    JOptionPane.showMessageDialog(CustomizerPanel.this, "Could not load the specified theme.\n" + ex.getMessage(), "Burp Customizer", JOptionPane.ERROR_MESSAGE);
                 }
             }
         });
@@ -173,18 +188,17 @@ public class CustomizerPanel extends JPanel {
                 fileChooser.setFileFilter(new FileNameExtensionFilter("IntelliJ Theme File (.theme.json)", "json"));
                 int res = fileChooser.showOpenDialog(CustomizerPanel.this);
                 if(res == JFileChooser.APPROVE_OPTION){
-                    selectFileButton.setText(fileChooser.getSelectedFile().getName());
+                    File chosen = fileChooser.getSelectedFile();
                     try {
-                        LookAndFeel theme = customizer.createThemeFromFile(fileChooser.getSelectedFile());
+                        LookAndFeel theme = customizer.createThemeFromFile(chosen);
+                        lookAndFeelSelector.setSelectedItem(null);
                         previewPanel.setPreviewTheme(theme);
-                        selectedThemeFile = fileChooser.getSelectedFile();
-                    } catch (IOException | UnsupportedLookAndFeelException ex) {
-                        previewPanel.reset();
+                        selectedThemeFile = chosen;
+                        selectFileButton.setText(chosen.getName());
+                    } catch (Exception | LinkageError ex) {
+                        //Leave the previous selection as it was.
                         JOptionPane.showMessageDialog(CustomizerPanel.this, "Could not load the specified theme.\n" + ex.getMessage(), "Burp Customizer", JOptionPane.ERROR_MESSAGE);
                     }
-                    lookAndFeelSelector.setSelectedItem(null);
-                }else{
-                    selectFileButton.setText("Select Theme File...");
                 }
             }
         });
@@ -205,15 +219,6 @@ public class CustomizerPanel extends JPanel {
             }
         });
 //        applyThemeButton.setMinimumSize(applyThemeButton.getSize());
-
-        if(customizer.getThemeSource() == BurpCustomizer.ThemeSource.BUILTIN && customizer.getSelectedBuiltIn() != null) {
-            lookAndFeelSelector.setSelectedItem(customizer.getSelectedBuiltIn());
-        } else if(customizer.getThemeSource() == BurpCustomizer.ThemeSource.FILE && customizer.getSelectedThemeFile() != null) {
-            lookAndFeelSelector.setSelectedItem(null);
-            File selectedFile = customizer.getSelectedThemeFile();
-            selectFileButton.setText(selectedFile.getName());
-            selectedThemeFile = selectedFile;
-        }
 
         PanelBuilder selectorPanelBuilder = new PanelBuilder();
         selectorPanelBuilder.setComponentGrid(new Component[][]{

@@ -1,0 +1,6 @@
+# The Gradle wrapper script must keep Unix line endings to run on Linux and macOS,
+# even if the repo is checked out on Windows (or through a Windows share / WSL mount).
+gradlew         text eol=lf
+*.bat           text eol=crlf
+*.jar           binary
+*.png           binary
