@@ -5,9 +5,9 @@
 Changes since v1.1.0. The README's "Build errors and fixes" section explains the cause of each build problem in more detail.
 
 **How this was verified:** clean builds on macOS (JDK 22) and Ubuntu 24.04.5 LTS (OpenJDK 21, arm64 container),
-`themeSmokeTest` against a Burp Suite 2026 jar (46 of 46 themes load), and offscreen renders of sample
-components using Burp's UI classes. The extension has not yet been clicked through inside a running Burp,
-and the code path for older Burp versions was not tested against an old Burp jar.
+`themeSmokeTest` against a Burp Suite 2026 jar using Burp's real extension class loader (the jar loads, and
+46 of 46 themes apply), and offscreen renders of sample components using Burp's UI classes.
+The code path for older Burp versions was not tested against an old Burp jar.
 
 ### Build
 - Upgraded the Gradle wrapper from 8.5 to 9.1.0. Gradle 8.5 could not run on JDK 22 or newer
@@ -39,6 +39,12 @@ and the code path for older Burp versions was not tested against an old Burp jar
     editor colours, with colours taken from the selected theme.
   - **Older Burp:** the previous behaviour is kept.
 - Burp's classes are looked up through several class loaders rather than only the system class loader.
+- Fixed `Extension class is not a recognized type` when adding the jar to Burp. Burp's extension class loader
+  hides its bundled FlatLaf and `burp.theme` classes, so no class which links against them can be the entry point.
+  v1.1.0 only loaded because it bundled a second copy of FlatLaf. `burp.BurpExtender` is now a bootstrap which
+  depends only on the JDK and the Montoya API, and starts `BurpCustomizer` from the same jar through a class
+  loader whose parent is Burp's own. `BurpCustomizer` no longer implements `BurpExtension` itself, and closes
+  that class loader when the extension is unloaded.
 
 ### Fixed
 - The theme preview went blank as soon as a theme was selected. It now draws the selected theme's main colours
@@ -58,8 +64,10 @@ and the code path for older Burp versions was not tested against an old Burp jar
 - The theme list relied on an unchecked cast of `Collectors.toList()` to `ArrayList`.
 
 ### Added
-- `themeSmokeTest` Gradle task (`src/test/java/ThemeSmokeTest.java`), which installs every bundled theme
-  against a real Burp jar and fails if Burp's look and feel properties no longer resolve.
+- `themeSmokeTest` Gradle task (`src/test/java/ThemeSmokeTest.java`). It loads the built jar through a class
+  loader with the same restrictions as Burp's (or Burp's real one, with `-PburpExtensionLoader=<class>`),
+  initializes the extension against a stub Montoya API, then installs every bundled theme against a real Burp
+  jar and fails if Burp's look and feel properties no longer resolve.
 - The extension sets its name to "Customizer" when loaded.
 - The "Notes" paragraph about switching between dark and light themes is shown in the Customizer tab, with the
   current location of Burp's display settings.

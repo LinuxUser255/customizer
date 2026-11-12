@@ -45,8 +45,6 @@ dependencies {
         exclude group: 'com.formdev', module: 'flatlaf'
     }
 
-    // Tests compile against the same FlatLaf as main, but run against the copy inside the Burp jar.
-    testCompileOnly "com.formdev:flatlaf:${flatlafVersion}"
     if (burpJar != null) {
         testRuntimeOnly files(burpJar)
     }
@@ -69,14 +67,20 @@ jar {
     destinationDirectory = file("$rootDir/releases")
 }
 
-// Loads every bundled theme against a real Burp jar and checks that Burp's colours resolve.
+// Loads the built jar the way Burp does, then applies every bundled theme against a real Burp jar.
 // Usage: ./gradlew themeSmokeTest -PburpJar=/path/to/burpsuite.jar
 tasks.register('themeSmokeTest', JavaExec) {
     group = 'verification'
-    description = 'Loads every bundled theme against a Burp Suite jar (-PburpJar=...).'
+    description = 'Loads the extension jar and every bundled theme against a Burp Suite jar (-PburpJar=...).'
+    dependsOn tasks.named('jar'), tasks.named('testClasses')
     mainClass = 'ThemeSmokeTest'
-    classpath = sourceSets.test.runtimeClasspath
+    // Only the test classes and Burp. The extension must be loaded from its jar, as it is in Burp.
+    classpath = files(sourceSets.test.output, burpJar ?: [])
     systemProperty 'java.awt.headless', 'true'
+    systemProperty 'extensionJar', tasks.named('jar').flatMap { it.archiveFile }.get().asFile
+    if (providers.gradleProperty('burpExtensionLoader').isPresent()) {
+        systemProperty 'burpExtensionLoader', providers.gradleProperty('burpExtensionLoader').get()
+    }
     doFirst {
         if (burpJar == null || !burpJar.exists()) {
             throw new GradleException('No Burp jar found. Pass -PburpJar=/path/to/burpsuite.jar')

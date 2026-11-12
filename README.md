@@ -121,7 +121,8 @@ git clone <this repo> && cd customizer
 
 **Testing against your Burp version (optional):**
 The extension depends on Burp's internal theme classes, which are not part of the Montoya API and can change
-between releases. To check that every bundled theme still loads against a particular Burp jar, run:
+between releases. To check that the built jar still loads the way Burp loads it, and that every bundled theme
+still applies against a particular Burp jar, run:
 
 ```
 ./gradlew themeSmokeTest -PburpJar=/path/to/burpsuite.jar
@@ -154,6 +155,7 @@ Problems which did not stop the build, but were wrong in the jar it produced:
 | 8 | The jar bundled a second, older copy of FlatLaf (2.4) alongside the one inside Burp. | `flatlaf-intellij-themes` pulled FlatLaf core in as a transitive dependency. | Core excluded, and FlatLaf updated from 2.4 to 3.7 (Burp currently ships 3.6 or newer). Themes which FlatLaf has since dropped are no longer available. |
 | 9 | The jar bundled the whole of Lombok and a copy of the Montoya API (2.9 MB in total). | The `Burp-Montoya-Utilities` artifact is itself a fat jar. | Those classes are excluded when the jar is assembled (now 0.8 MB). |
 | 10 | The unused `JFontChooser` dependency was bundled. | Left over from an earlier version. | Removed. |
+| 11 | **Burp refused to load the jar:** `java.lang.Exception: Extension class is not a recognized type`. | Burp loads extensions with a class loader which hides its bundled FlatLaf (`com.formdev.flatlaf`) and its look and feel (`burp.theme`). Burp tries each class in the jar, silently ignores any which fail to link, and reports this error when none are left. v1.1.0 only loaded because of problem 8: it linked against its own, second copy of FlatLaf. Fixing 8 exposed this. | `burp.BurpExtender` is now a small bootstrap which only uses the JDK and the Montoya API. It starts the real extension from the same jar through a second class loader whose parent is Burp's own, so the extension uses Burp's single copy of FlatLaf. |
 
 Other bugs fixed along the way:
 * The theme preview went blank as soon as a theme was selected. It now shows the selected theme's colours.
@@ -165,5 +167,8 @@ Other bugs fixed along the way:
 * The UI was built off the Swing event dispatch thread.
 
 **Not yet verified:** the fixes above were checked by compiling, by running `themeSmokeTest` against Burp Suite's jar
-(46 of 46 themes load), and by rendering sample components offscreen with Burp's UI classes. The extension has not
-been clicked through inside a running Burp, so individual Burp screens may still have elements which don't match the theme.
+(the extension jar loads through Burp's own extension class loader, and 46 of 46 themes apply), and by rendering sample
+components offscreen with Burp's UI classes. Individual Burp screens may still have elements which don't match the theme.
+
+If Burp reports an error when loading the jar, check the "Errors" tab of the extension in "Extensions -> Installed".
+The extension logs the full cause there.

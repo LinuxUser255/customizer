@@ -1,6 +1,5 @@
 package com.coreyd97.burpcustomizer;
 
-import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.IntelliJTheme;
@@ -16,7 +15,11 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.stream.Collectors;
 
-public class BurpCustomizer implements BurpExtension {
+/**
+ * The extension itself. This is not the class Burp loads: it links against Burp's bundled FlatLaf, which Burp
+ * hides from extensions, so it is started reflectively by {@link burp.BurpExtender} from a class loader which can see it.
+ */
+public class BurpCustomizer {
 
     enum ThemeSource {BUILTIN, FILE}
 
@@ -51,10 +54,9 @@ public class BurpCustomizer implements BurpExtension {
         return themeSource;
     }
 
-    @Override
+    /** Called reflectively by {@link burp.BurpExtender}. */
     public void initialize(MontoyaApi montoyaApi) {
         BurpCustomizer.montoya = montoyaApi;
-        montoya.extension().setName("Customizer");
         originalBurpTheme = UIManager.getLookAndFeel();
 
         String sourceEnum = montoya.persistence().preferences().getString("source");
@@ -179,6 +181,13 @@ public class BurpCustomizer implements BurpExtension {
                     FlatLaf.updateUI();
                 }
             } catch (UnsupportedLookAndFeelException ignored) {
+            }
+            //Release the extension jar, which our class loader (created by burp.BurpExtender) holds open.
+            if (BurpCustomizer.class.getClassLoader() instanceof Closeable) {
+                try {
+                    ((Closeable) BurpCustomizer.class.getClassLoader()).close();
+                } catch (IOException ignored) {
+                }
             }
         });
     }
